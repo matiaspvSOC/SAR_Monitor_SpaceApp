@@ -15,17 +15,30 @@
 
     .panel {
       position: absolute; top: 16px; left: 16px; z-index: 1000;
-      width: 315px; background: rgba(15, 23, 42, 0.94);
+      width: 400px; background: rgba(15, 23, 42, 0.94);
       border: 1px solid #334155; border-radius: 10px; padding: 16px;
       box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     }
-    h1 { font-size: 1.1rem; color: #38bdf8; margin-bottom: 4px; }
-    p.sub { font-size: 0.8rem; color: #94a3b8; margin-bottom: 14px; }
-    label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: #cbd5e1; }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; }
+    .btn-toggle {
+      background: #1e293b; color: #38bdf8; border: 1px solid #475569;
+      border-radius: 6px; padding: 3px 9px; font-size: 0.85rem; cursor: pointer;
+    }
+
+    /* Ajuste automático solo para celulares */
+    @media (max-width: 600px) {
+      .panel {
+        top: auto; bottom: 12px; left: 12px; right: 12px;
+        width: auto; max-height: 42vh; overflow-y: auto; padding: 12px;
+      }
+    }
+    h1 { font-size: 1.8rem; color: #38bdf8; margin-bottom: 4px; }
+    p.sub { font-size: 1.5rem; color: #94a3b8; margin-bottom: 14px; }
+    label { display: block; font-size: 1.5rem; font-weight: 600; margin-bottom: 6px; color: #cbd5e1; }
     select, input[type="range"] { width: 100%; margin-bottom: 12px; }
     select {
       padding: 8px; border-radius: 6px; background: #1e293b;
-      color: #fff; border: 1px solid #475569; font-size: 0.85rem;
+      color: #fff; border: 1px solid #475569; font-size: 1.5rem;
     }
 
     .botones { display: flex; gap: 6px; margin-bottom: 12px; }
@@ -49,53 +62,59 @@
     .color { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
   </style>
 </head>
-<body>
+
+  <body>
 
   <div class="panel">
-    <h1>Biobío SAR Monitor</h1>
-    <p class="sub">Monitoreo satelital de inundaciones (Sentinel-1 + NISAR)</p>
-
-    <label for="selectorCapa">Capa Satelital:</label>
-    <select id="selectorCapa" onchange="cargarCapa(this.value)">
-      <option value="">-- Solo mapa base --</option>
-      <optgroup label="Sentinel-1 (Banda C · Junio 2024)">
-        <option value="s1_antes.png">Antes del temporal (01 Jun)</option>
-        <option value="s1_desborde.png">Momento del desborde (13 Jun)</option>
-        <option value="s1_cambio_rgb.png" selected>Detección de Cambio RGB</option>
-      </optgroup>
-      <optgroup label="NISAR (Banda L · Septiembre 2026)">
-        <option value="nisar_antes.png">Antes del temporal (18 Sep)</option>
-        <option value="nisar_desborde.png">Durante Alerta Roja (30 Sep)</option>
-        <option value="nisar_cambio_rgb.png">Detección de Cambio RGB</option>
-      </optgroup>
-    </select>
-
-    <label for="opacidad">Transparencia de capa: <span id="valorOpacidad">85%</span></label>
-    <input type="range" id="opacidad" min="0" max="1" step="0.05" value="0.85" oninput="ajustarOpacidad(this.value)" />
-
-    <label>Zonas críticas:</label>
-    <div class="botones">
-      <button onclick="map.setView([-37.05, -73.15], 9)">Bahia Concepcion</button>
-      <button onclick="map.setView([-37.22, -73.44], 12)">Tubul</button>
-      <button onclick="map.setView([-36.82, -73.13], 12)">Desembocadura Rio BioBio</button>
+    <div class="panel-header">
+      <h1>Biobío SAR Monitor</h1>
+      <button class="btn-toggle" onclick="const c=document.getElementById('panelBody'); const o=c.style.display==='none'; c.style.display=o?'block':'none'; this.textContent=o?'−':'+'">−</button>
     </div>
 
-    <!-- Herramienta de regla para medir hectáreas y distancias -->
-    <label>Regla de medición (clic en mapa):</label>
-    <div class="botones">
-      <button id="btnRegla" onclick="alternarRegla()">Activar regla</button>
-      <button onclick="limpiarMedicion()">Limpiar</button>
-    </div>
-    <div class="medicion-box">
-      <div class="medicion-dato"><span>Distancia / Perímetro:</span> <strong id="outDistancia">0.00 km</strong></div>
-      <div class="medicion-dato"><span>Superficie inundada:</span> <strong id="outArea">0.0 ha (0.00 km²)</strong></div>
-    </div>
+    <div id="panelBody">
+      <p class="sub">Monitoreo satelital de inundaciones (Sentinel-1 + NISAR)</p>
 
-    <div class="leyenda">
-      <strong>Guía Detección de Cambio RGB:</strong>
-      <div class="item"><span class="color" style="background:#ef4444;"></span> Rojo: Inundacion reciente</div>
-      <div class="item"><span class="color" style="background:#22d3ee;"></span> Cian: Agua bajo vegetación (doble rebote)</div>
-      <div class="item"><span class="color" style="background:#64748b;"></span> Gris: Terreno sin cambios</div>
+      <label for="selectorCapa">Capa Satelital:</label>
+      <select id="selectorCapa" onchange="cargarCapa(this.value)">
+        <option value="">-- Solo mapa base --</option>
+        <optgroup label="Sentinel-1 (Banda C · Junio 2024)">
+          <option value="s1_antes.png">Antes del temporal (01 Jun)</option>
+          <option value="s1_desborde.png">Momento del desborde (13 Jun)</option>
+          <option value="s1_cambio_rgb.png" selected>Detección de Cambio RGB</option>
+        </optgroup>
+        <optgroup label="NISAR (Banda L · Septiembre 2026)">
+          <option value="nisar_antes.png">Antes del temporal (18 Sep)</option>
+          <option value="nisar_desborde.png">Durante Alerta Roja (30 Sep)</option>
+          <option value="nisar_cambio_rgb.png">Detección de Cambio RGB</option>
+        </optgroup>
+      </select>
+
+      <label for="opacidad">Transparencia de capa: <span id="valorOpacidad">85%</span></label>
+      <input type="range" id="opacidad" min="0" max="1" step="0.05" value="0.85" oninput="ajustarOpacidad(this.value)" />
+
+      <label>Zonas críticas:</label>
+      <div class="botones">
+        <button onclick="map.setView([-37.05, -73.15], 9)">Bahia Concepcion</button>
+        <button onclick="map.setView([-37.22, -73.44], 12)">Tubul</button>
+        <button onclick="map.setView([-36.82, -73.13], 12)">Desembocadura Rio BioBio</button>
+      </div>
+
+      <label>Regla de medición (clic en mapa):</label>
+      <div class="botones">
+        <button id="btnRegla" onclick="alternarRegla()">Activar regla</button>
+        <button onclick="limpiarMedicion()">Limpiar</button>
+      </div>
+      <div class="medicion-box">
+        <div class="medicion-dato"><span>Distancia / Perímetro:</span> <strong id="outDistancia">0.00 km</strong></div>
+        <div class="medicion-dato"><span>Superficie inundada:</span> <strong id="outArea">0.0 ha (0.00 km²)</strong></div>
+      </div>
+
+      <div class="leyenda">
+        <strong>Guía Detección de Cambio RGB:</strong>
+        <div class="item"><span class="color" style="background:#ef4444;"></span> Rojo: Inundacion reciente</div>
+        <div class="item"><span class="color" style="background:#22d3ee;"></span> Cian: Agua bajo vegetación (doble rebote)</div>
+        <div class="item"><span class="color" style="background:#64748b;"></span> Gris: Terreno sin cambios</div>
+      </div>
     </div>
   </div>
 
