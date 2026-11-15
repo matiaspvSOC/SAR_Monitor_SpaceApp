@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Biobío SAR Monitor</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; }
+    #map { height: 100vh; width: 100%; }
+
+    .panel {
+      position: absolute; top: 16px; left: 16px; z-index: 1000;
+      width: 400px; background: rgba(15, 23, 42, 0.94);
+      border: 1px solid #334155; border-radius: 10px; padding: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; }
+    .btn-toggle {
+      background: #1e293b; color: #38bdf8; border: 1px solid #475569;
+      border-radius: 6px; padding: 3px 9px; font-size: 0.85rem; cursor: pointer;
+    }
+
+    /* Ajuste automático solo para celulares */
+    @media (max-width: 600px) {
+      .panel {
+        top: auto; bottom: 12px; left: 12px; right: 12px;
+        width: auto; max-height: 42vh; overflow-y: auto; padding: 12px;
+      }
+    }
+    h1 { font-size: 1.8rem; color: #38bdf8; margin-bottom: 4px; }
+    p.sub { font-size: 1.5rem; color: #94a3b8; margin-bottom: 14px; }
+    label { display: block; font-size: 1.5rem; font-weight: 600; margin-bottom: 6px; color: #cbd5e1; }
+    select, input[type="range"] { width: 100%; margin-bottom: 12px; }
+    select {
+      padding: 8px; border-radius: 6px; background: #1e293b;
+      color: #fff; border: 1px solid #475569; font-size: 1.5rem;
+    }
+
+    .botones { display: flex; gap: 6px; margin-bottom: 12px; }
+    .botones button {
+      flex: 1; padding: 7px 6px; font-size: 0.76rem; border: 1px solid #475569;
+      background: #1e293b; color: #e2e8f0; border-radius: 6px; cursor: pointer;
+    }
+    .botones button:hover { background: #334155; }
+    .botones button.activo { background: #0284c7; border-color: #38bdf8; color: #fff; font-weight: 600; }
+
+    /* Caja de resultados de la regla */
+    .medicion-box {
+      background: #1e293b; border: 1px solid #334155; border-radius: 6px;
+      padding: 8px 10px; margin-bottom: 12px; font-size: 0.8rem;
+    }
+    .medicion-dato { display: flex; justify-content: space-between; margin: 3px 0; }
+    .medicion-dato strong { color: #38bdf8; }
+
+    .leyenda { border-top: 1px solid #334155; padding-top: 10px; font-size: 0.78rem; }
+    .item { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: #cbd5e1; }
+    .color { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+  </style>
+</head>
+
+  <body>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h1>Biobío SAR Monitor</h1>
+      <button class="btn-toggle" onclick="const c=document.getElementById('panelBody'); const o=c.style.display==='none'; c.style.display=o?'block':'none'; this.textContent=o?'−':'+'">−</button>
+    </div>
+
+    <div id="panelBody">
+      <p class="sub">Monitoreo satelital de inundaciones (Sentinel-1 + NISAR)</p>
+
+      <label for="selectorCapa">Capa Satelital:</label>
+      <select id="selectorCapa" onchange="cargarCapa(this.value)">
+        <option value="">-- Solo mapa base --</option>
+        <optgroup label="Sentinel-1 (Banda C · Junio 2024)">
+          <option value="s1_antes.png">Antes del temporal (01 Jun)</option>
+          <option value="s1_desborde.png">Momento del desborde (13 Jun)</option>
+          <option value="s1_cambio_rgb.png" selected>Detección de Cambio RGB</option>
+        </optgroup>
+        <optgroup label="NISAR (Banda L · Septiembre 2026)">
+          <option value="nisar_antes.png">Antes del temporal (18 Sep)</option>
+          <option value="nisar_desborde.png">Durante Alerta Roja (30 Sep)</option>
+          <option value="nisar_cambio_rgb.png">Detección de Cambio RGB</option>
+        </optgroup>
+      </select>
+
+      <label for="opacidad">Transparencia de capa: <span id="valorOpacidad">85%</span></label>
+      <input type="range" id="opacidad" min="0" max="1" step="0.05" value="0.85" oninput="ajustarOpacidad(this.value)" />
+
+      <label>Zonas críticas:</label>
+      <div class="botones">
+        <button onclick="map.setView([-37.05, -73.15], 9)">Bahia Concepcion</button>
+        <button onclick="map.setView([-37.22, -73.44], 12)">Tubul</button>
+        <button onclick="map.setView([-36.82, -73.13], 12)">Desembocadura Rio BioBio</button>
+      </div>
+
+      <label>Regla de medición (clic en mapa):</label>
+      <div class="botones">
+        <button id="btnRegla" onclick="alternarRegla()">Activar regla</button>
+        <button onclick="limpiarMedicion()">Limpiar</button>
+      </div>
+      <div class="medicion-box">
+        <div class="medicion-dato"><span>Distancia / Perímetro:</span> <strong id="outDistancia">0.00 km</strong></div>
+        <div class="medicion-dato"><span>Superficie inundada:</span> <strong id="outArea">0.0 ha (0.00 km²)</strong></div>
+      </div>
+
+      <div class="leyenda">
+        <strong>Guía Detección de Cambio RGB:</strong>
+        <div class="item"><span class="color" style="background:#ef4444;"></span> Rojo: Inundacion reciente</div>
+        <div class="item"><span class="color" style="background:#22d3ee;"></span> Cian: Agua bajo vegetación (doble rebote)</div>
+        <div class="item"><span class="color" style="background:#64748b;"></span> Gris: Terreno sin cambios</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <script>
+    const boundsBiobio = [[-37.70, -73.60], [-36.50, -72.70]];
+
+    const map = L.map("map", { zoomControl: false }).setView([-37.05, -73.15], 9);
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+
+    // Regla de escala métrica física en la esquina inferior izquierda
+    L.control.scale({ imperial: false, position: "bottomleft" }).addTo(map);
+
+    // Mapas base sin clave API
+    // Único mapa base: Satélite Óptico (Esri World Imagery)
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      attribution: "&copy; Esri"
+    }).addTo(map);
+
+    // Carga de capas SAR
+    let capaRadar = null;
+
+    function cargarCapa(nombreArchivo) {
+      if (capaRadar) {
+        map.removeLayer(capaRadar);
+        capaRadar = null;
+      }
+      if (!nombreArchivo) return;
+
+      const opacidad = parseFloat(document.getElementById("opacidad").value);
+      capaRadar = L.imageOverlay("capas/" + nombreArchivo, boundsBiobio, { opacity: opacidad }).addTo(map);
+    }
+
+    function ajustarOpacidad(valor) {
+      document.getElementById("valorOpacidad").textContent = Math.round(valor * 100) + "%";
+      if (capaRadar) capaRadar.setOpacity(parseFloat(valor));
+    }
+
+    // Lógica de la regla interactiva (distancia y hectáreas geodésicas)
+    let reglaActiva = false;
+    let puntos = [];
+    let marcadores = [];
+    let formaMedicion = null;
+
+    function alternarRegla() {
+      reglaActiva = !reglaActiva;
+      const btn = document.getElementById("btnRegla");
+      btn.textContent = reglaActiva ? "Detener regla" : "Activar regla";
+      btn.classList.toggle("activo", reglaActiva);
+      document.getElementById("map").style.cursor = reglaActiva ? "crosshair" : "";
+    }
+
+    function calcularAreaHectareas(latlngs) {
+      if (latlngs.length < 3) return 0;
+      const R = 6378137;
+      const d2r = Math.PI / 180;
+      let area = 0;
+      for (let i = 0; i < latlngs.length; i++) {
+        const p1 = latlngs[i];
+        const p2 = latlngs[(i + 1) % latlngs.length];
+        area += ((p2.lng - p1.lng) * d2r) * (2 + Math.sin(p1.lat * d2r) + Math.sin(p2.lat * d2r));
+      }
+      return Math.abs(area * R * R / 2.0) / 10000;
+    }
+
+    function actualizarMedicion() {
+      if (formaMedicion) map.removeLayer(formaMedicion);
+
+      let distMetros = 0;
+      for (let i = 0; i < puntos.length - 1; i++) {
+        distMetros += puntos[i].distanceTo(puntos[i + 1]);
+      }
+
+      if (puntos.length >= 3) {
+        distMetros += puntos[puntos.length - 1].distanceTo(puntos[0]);
+        formaMedicion = L.polygon(puntos, { color: "#facc15", weight: 2, fillOpacity: 0.25 }).addTo(map);
+      } else if (puntos.length === 2) {
+        formaMedicion = L.polyline(puntos, { color: "#facc15", weight: 2 }).addTo(map);
+      }
+
+      const ha = calcularAreaHectareas(puntos);
+      const km2 = ha / 100;
+      document.getElementById("outDistancia").textContent = (distMetros / 1000).toFixed(2) + " km";
+      document.getElementById("outArea").textContent = ha.toFixed(1) + " ha (" + km2.toFixed(2) + " km²)";
+    }
+
+    function limpiarMedicion() {
+      puntos = [];
+      marcadores.forEach(m => map.removeLayer(m));
+      marcadores = [];
+      if (formaMedicion) {
+        map.removeLayer(formaMedicion);
+        formaMedicion = null;
+      }
+      document.getElementById("outDistancia").textContent = "0.00 km";
+      document.getElementById("outArea").textContent = "0.0 ha (0.00 km²)";
+    }
+
+    map.on("click", function(e) {
+      if (!reglaActiva) return;
+      puntos.push(e.latlng);
+      const puntoVisual = L.circleMarker(e.latlng, {
+        radius: 4, color: "#facc15", fillColor: "#facc15", fillOpacity: 1
+      }).addTo(map);
+      marcadores.push(puntoVisual);
+      actualizarMedicion();
+    });
+
+    cargarCapa("s1_cambio_rgb.png");
+  </script>
+</body>
+</html>
